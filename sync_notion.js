@@ -4,13 +4,19 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
 
-const notion = new Client({ auth: process.env.NOTION_API_KEY });
+// 2025-09-03 버전을 명시적으로 사용
+const notion = new Client({ 
+    auth: process.env.NOTION_API_KEY,
+    notionVersion: "2025-09-03" 
+});
 const n2m = new NotionToMarkdown({ notionClient: notion });
 
 async function fetchNotionPosts() {
-  const databaseId = process.env.NOTION_DATABASE_ID;
-  const response = await notion.databases.query({
-    database_id: databaseId,
+  const dataSourceId = process.env.NOTION_DATABASE_ID;
+  
+  // 최신 API에서는 dataSources.query를 사용합니다.
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
     filter: {
       property: "Published",
       checkbox: {
@@ -19,12 +25,17 @@ async function fetchNotionPosts() {
     },
   });
 
+  if (!fs.existsSync("_posts")) {
+    fs.mkdirSync("_posts");
+  }
+
   for (const page of response.results) {
-    const title = page.properties.Name.title[0]?.plain_text || "Untitled";
-    const date = page.properties.Date?.date?.start || new Date().toISOString().split('T')[0];
-    const tags = page.properties.Tags?.multi_select.map(t => t.name) || [];
+    // 2025-09-03 버전에서는 페이지 속성 구조가 달라졌을 수 있으므로 안전하게 가져옵니다.
+    const props = page.properties;
+    const title = props.Name?.title[0]?.plain_text || "Untitled";
+    const date = props.Date?.date?.start || new Date().toISOString().split('T')[0];
+    const tags = props.Tags?.multi_select.map(t => t.name) || [];
     
-    // Create valid filename: YYYY-MM-DD-title.md
     const safeTitle = title.replace(/[^\w\s-]/gi, '').replace(/\s+/g, '-').toLowerCase();
     const fileName = `${date}-${safeTitle}.md`;
     const filePath = path.join("_posts", fileName);
@@ -47,4 +58,7 @@ tags: [${tags.join(", ")}]
   }
 }
 
-fetchNotionPosts().catch(console.error);
+fetchNotionPosts().catch(err => {
+    console.error("Error during sync:", err.message);
+    if (err.body) console.error("Details:", err.body);
+});
