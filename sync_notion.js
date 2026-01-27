@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
 
-const notion = new Client({ 
+const notion = new Client({
     auth: process.env.NOTION_API_KEY,
     notionVersion: "2025-09-03"
 });
@@ -30,13 +30,11 @@ async function fetchNotionPosts() {
   for (const page of response.results) {
     const props = page.properties;
     
-    // 속성 이름에 주의하세요! (Tag vs Tags)
     const title = props.Name?.title?.[0]?.plain_text || "Untitled";
     const date = props.Date?.date?.start || new Date().toISOString().split('T')[0];
-    const tags = props.Tag?.multi_select?.map(t => t.name) || []; // 'Tag'로 수정됨
+    const tags = props.Tag?.multi_select?.map(t => t.name) || [];
     
-    // 한글 제목도 파일명에 쓸 수 있도록 허용 (공백은 -로)
-    const safeTitle = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9가-힣\-\_]/g, '');
+    const safeTitle = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9가-힣\-_]/g, '');
     const fileName = `${date}-${safeTitle}.md`;
     const filePath = path.join("_posts", fileName);
 
@@ -44,22 +42,29 @@ async function fetchNotionPosts() {
 
     const mdblocks = await n2m.pageToMarkdown(page.id);
     const mdString = n2m.toMarkdownString(mdblocks);
-    
-    // 본문 내용 추출 (parent 속성이 문자열을 담고 있음)
     const content = mdString.parent || "";
 
-    const frontmatter = `---
-layout: post
-title: "${title}"
-date: ${date} 00:00:00 +0900
-categories: [Notion]
-tags: [${tags.join(", ")}]
----
+    // --- 핵심 수정: 본문 내용을 description으로 변환 ---
+    // 마크다운 문법 제거 후 순수 텍스트만 추출
+    let plainText = content
+      .replace(/^#+\s+/gm, '') // 헤더 제거
+      .replace(/(\*\*|__)(.*?)\1/g, '$2') // 볼드 제거
+      .replace(/(\*|_)(.*?)\1/g, '$2') // 이탤릭 제거
+      .replace(/!\[.*?\]\(.*?\)/g, '') // 이미지 태그 제거
+      .replace(/\^([^\]]+)\]\(.*?\)/g, '$1') // 링크 텍스트만 남김
+      .replace(/\n/g, ' ') // 줄바꿈 -> 공백
+      .replace(/\s+/g, ' ') // 다중 공백 -> 하나로
+      .trim();
 
-`;
+    // 150자 정도로 자르기 (미리보기에 적당한 길이)
+    const description = plainText.length > 150 
+      ? plainText.substring(0, 150) + "..." 
+      : plainText;
+
+    const frontmatter = `---\nlayout: post\ntitle: "${title}"\ndate: ${date} 00:00:00 +0900\ncategories: [Notion]\ntags: [${tags.join(", ")}]\ndescription: "${description.replace(/"/g, '\\"')}"\n---`
 
     fs.writeFileSync(filePath, frontmatter + content, 'utf8');
-    console.log(`Synced: ${fileName}`);
+    console.log(`Synced: ${fileName} (Description added)`);
   }
 }
 
