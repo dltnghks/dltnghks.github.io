@@ -33,7 +33,7 @@ async function fetchNotionPosts() {
     // 노션 태그랑 일치해야 됨.
     const title = props.Name?.title?.[0]?.plain_text || "Untitled";
     const date = props.Date?.date?.start || new Date().toISOString().split('T')[0];
-    const tags = props.Tag?.multi_select?.map(t => t.name) || [];
+    const tags = props.Tags?.multi_select?.map(t => t.name) || [];
     const categories = props.Categories?.multi_select?.map(t => t.name) || [];
     
     const safeTitle = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9가-힣\-_]/g, '');
