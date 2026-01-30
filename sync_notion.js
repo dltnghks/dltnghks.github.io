@@ -3,6 +3,7 @@ const { NotionToMarkdown } = require("notion-to-md");
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
+const http = require("http"); // Import http module
 const crypto = require("crypto");
 require("dotenv").config();
 
@@ -15,22 +16,35 @@ const n2m = new NotionToMarkdown({ notionClient: notion });
 // Helper function to download a file
 const downloadFile = (url, targetPath) =>
   new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(targetPath);
-    https
-      .get(url, (response) => {
-        if (response.statusCode >= 400) {
-          return reject(
-            new Error(`Failed to download file: ${response.statusCode}`)
-          );
-        }
-        response.pipe(file);
-        file.on("finish", () => {
-          file.close(resolve);
-        });
-      })
-      .on("error", (err) => {
-        fs.unlink(targetPath, () => reject(err));
+    console.log(`Downloading image from: ${url}`);
+    const options = {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+      }
+    };
+    const client = url.startsWith("https") ? https : http;
+    const request = client.get(url, options, (response) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        console.log(`Redirecting to: ${response.headers.location}`);
+        return downloadFile(response.headers.location, targetPath).then(resolve).catch(reject);
+      }
+      if (response.statusCode !== 200) {
+        return reject(
+          new Error(`Failed to download file: ${response.statusCode} ${response.statusMessage}`)
+        );
+      }
+      const file = fs.createWriteStream(targetPath);
+      response.pipe(file);
+      file.on("finish", () => {
+        file.close(resolve);
+        console.log(`Successfully downloaded to: ${targetPath}`);
       });
+    });
+
+    request.on("error", (err) => {
+      console.error(`Error downloading file: ${err.message}`);
+      fs.unlink(targetPath, () => reject(err));
+    });
   });
 
 async function fetchNotionPosts() {
