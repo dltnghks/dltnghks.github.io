@@ -1,0 +1,102 @@
+---
+layout: post
+title: "위상정렬"
+date: 2026-01-29 00:00:00 +0900
+categories: [Baekjoon]
+tags: [C++]
+---
+
+
+![image](./images/64abffb40e63c3f90758dbe79dedb288.png)
+
+
+[2252번: 줄 세우기](https://www.acmicpc.net/problem/2252)
+
+
+### 위상정렬?
+
+
+‘위상’은 물체의 ‘위치’나 ‘형상’의 관계를 뜻한다.
+
+
+**일반 정렬**
+
+- 기준 : 값의 크기 ( 10 > 5 )
+- 결과 : 1, 2, 3, 4, 5 …
+
+**위상 정렬**
+
+- 기준 : 순서와 관계 ( A는 B보다 먼저 해야 한다. )
+- 결과 : 답이 여러 개일 수 있다.
+
+위상 정렬이 성립하기 위한 두 가지 조건
+
+1. 방향이 있어야 한다.(Directed)
+2. 사이클이 없어야 한다.
+
+    ⇒ 위상 정렬이 가능한 그래프를 DAG(Directed Acyclic Graph)라고 부른다.
+
+
+### 어떻게 구현하나요?
+
+1. 진입 차수 기록 : 나보다 앞에 서야 하는 사람이 생길 때마다 내 `inDegree` 를 +1 한다.
+2. 0명인 사람 찾기 : `inDegree`가 0인 사람은 바로 줄을 서도 된다. ⇒ 큐에 넣는다.
+3. 줄 세우기 & 제거
+    - 큐에서 한 명(A)를 꺼내어 줄을 세운다.
+    - A가 빠졌으니, A뒤에 서기로 헀던 사람(B)들의 `inDegree` 를 1씩 깎아준다.
+    - 깎았는데 B의 `inDegree`가 0이 되었다면? B도 큐에 넣는다.
+
+### 위상정렬 구현
+
+
+```c++
+#include <iostream>
+#include <vector>
+#include <queue>
+
+using namespace std;
+
+int main() {
+    int n, m;
+    cin >> n >> m;
+    
+    // 1. 그래프와 진입 차수(inDegree) 테이블 생성
+    vector<vector<int>> graph(n + 1);
+    vector<int> inDegree(n + 1, 0);
+
+    for(int i = 0; i < m; i++){
+        int a, b;
+        cin >> a >> b;
+        graph[a].push_back(b); // a 뒤에 b가 선다
+        inDegree[b]++;         // b의 진입 차수 증가 (내 앞에 한 명 더 생김)
+    }
+
+    // 2. 진입 차수가 0인(바로 줄 서도 되는) 학생 큐에 넣기
+    queue<int> q;
+    for(int i = 1; i <= n; i++){
+        if(inDegree[i] == 0) {
+            q.push(i);
+        }
+    }
+
+    // 3. 큐가 빌 때까지 반복 (위상 정렬 수행)
+    while(!q.empty()){
+        // 1. 큐에서 학생(cur)을 꺼내고 출력한다.
+        int cur = q.front();
+        cout << cur << " ";
+        q.pop();
+
+        // 2. graph[cur]에 연결된 다음 학생(next)들의 inDegree를 1 줄인다.
+        for(int next : graph[cur]){
+            inDegree[next]--;
+            // 3. 만약 inDegree가 0이 된 학생이 있다면 큐에 넣는다.
+            if(inDegree[next] == 0){
+                q.push(next);
+            }
+        }
+    }
+
+    return 0;
+}
+```
+
