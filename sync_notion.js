@@ -51,6 +51,11 @@ async function fetchNotionPosts() {
     fs.mkdirSync(postsDir);
   }
 
+  const assetsImgDir = "assets/img/posts";
+  if (!fs.existsSync(assetsImgDir)) {
+    fs.mkdirSync(assetsImgDir, { recursive: true });
+  }
+
   for (const page of response.results) {
     const props = page.properties;
 
@@ -63,13 +68,12 @@ async function fetchNotionPosts() {
     const safeTitle = title
       .replace(/\s+/g, "-")
       .replace(/[^a-zA-Z0-9가-힣\-_]/g, "");
-    const postDirName = `${date}-${safeTitle}`;
-    const postDirPath = path.join(postsDir, postDirName);
-    const imagesDirPath = path.join(postDirPath, "images");
+    const postFileName = `${date}-${safeTitle}.md`;
+    const postFilePath = path.join(postsDir, postFileName);
 
-    if (!fs.existsSync(postDirPath)) {
-      fs.mkdirSync(postDirPath, { recursive: true });
-    }
+    const imageDirName = `${date}-${safeTitle}`;
+    const imagesDirPath = path.join(assetsImgDir, imageDirName);
+    
     if (!fs.existsSync(imagesDirPath)) {
       fs.mkdirSync(imagesDirPath, { recursive: true });
     }
@@ -85,7 +89,7 @@ async function fetchNotionPosts() {
         const fileExtension = path.extname(new URL(imageUrl).pathname);
         const imageName = `${crypto.randomBytes(16).toString("hex")}${fileExtension}`;
         const imagePath = path.join(imagesDirPath, imageName);
-        const relativeImagePath = `./images/${imageName}`;
+        const relativeImagePath = `/assets/img/posts/${imageDirName}/${imageName}`;
 
         await downloadFile(imageUrl, imagePath);
         console.log(`Downloaded image: ${imageName}`);
@@ -110,9 +114,8 @@ tags: [${tags.join(", ")}]
 
 `;
 
-    const filePath = path.join(postDirPath, "index.md");
-    fs.writeFileSync(filePath, frontmatter + content, "utf8");
-    console.log(`Synced: ${postDirName}/index.md`);
+    fs.writeFileSync(postFilePath, frontmatter + content, "utf8");
+    console.log(`Synced: ${postFileName}`);
   }
 }
 
