@@ -7,7 +7,7 @@ tags: [AI]
 ---
 
 
-![image](/assets/img/posts/2026-01-30-Gemini-CLI-Sub-agents/5f066e22f1699737650dcb99fa8d93a4.png)
+![image](/assets/img/posts/2026-01-30-Gemini-CLI-Sub-agents/5af0b23c1706f703bec72ca3f4aa842f.png)
 
 
 [https://geminicli.com/docs/core/subagents/](https://geminicli.com/docs/core/subagents/)
