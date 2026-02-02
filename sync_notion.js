@@ -101,8 +101,8 @@ async function fetchNotionPosts() {
 
       try {
         const fileExtension = path.extname(new URL(imageUrl).pathname);
-        // Create a deterministic file name from the image URL's hash
-        const imageName = `${crypto.createHash("sha1").update(imageUrl).digest("hex")}${fileExtension}`;
+        // Create a deterministic file name from the block's unique ID
+        const imageName = `${block.id}${fileExtension}`;
         const imagePath = path.join(imagesDirPath, imageName);
         const relativeImagePath = `/assets/img/posts/${imageDirName}/${imageName}`;
 
