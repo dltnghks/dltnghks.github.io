@@ -101,12 +101,19 @@ async function fetchNotionPosts() {
 
       try {
         const fileExtension = path.extname(new URL(imageUrl).pathname);
-        const imageName = `${crypto.randomBytes(16).toString("hex")}${fileExtension}`;
+        // Create a deterministic file name from the image URL's hash
+        const imageName = `${crypto.createHash("sha1").update(imageUrl).digest("hex")}${fileExtension}`;
         const imagePath = path.join(imagesDirPath, imageName);
         const relativeImagePath = `/assets/img/posts/${imageDirName}/${imageName}`;
 
-        await downloadFile(imageUrl, imagePath);
-        console.log(`Downloaded image: ${imageName}`);
+        // Download the image only if it doesn't already exist
+        if (!fs.existsSync(imagePath)) {
+          await downloadFile(imageUrl, imagePath);
+          console.log(`Downloaded new image: ${imageName}`);
+        } else {
+          console.log(`Image already exists, skipping: ${imageName}`);
+        }
+        
         return `![${caption}](${relativeImagePath})`;
       } catch (error) {
         console.error(`Failed to download image from ${imageUrl}:`, error);
