@@ -1,143 +1,440 @@
 const { Client } = require("@notionhq/client");
-const { NotionToMarkdown } = require("notion-to-md");
 const fs = require("fs");
 const path = require("path");
-const https = require("https");
-const http = require("http"); // Import http module
-const crypto = require("crypto");
+const matter = require("gray-matter");
 require("dotenv").config();
 
 const notion = new Client({
   auth: process.env.NOTION_API_KEY,
   notionVersion: "2025-09-03",
 });
-const n2m = new NotionToMarkdown({ notionClient: notion });
 
-// Helper function to download a file
-const downloadFile = (url, targetPath) =>
-  new Promise((resolve, reject) => {
-    console.log(`Downloading image from: ${url}`);
-    const options = {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-      }
-    };
-    const client = url.startsWith("https") ? https : http;
-    const request = client.get(url, options, (response) => {
-      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-        console.log(`Redirecting to: ${response.headers.location}`);
-        return downloadFile(response.headers.location, targetPath).then(resolve).catch(reject);
-      }
-      if (response.statusCode !== 200) {
-        return reject(
-          new Error(`Failed to download file: ${response.statusCode} ${response.statusMessage}`)
-        );
-      }
-      const file = fs.createWriteStream(targetPath);
-      response.pipe(file);
-      file.on("finish", () => {
-        file.close(resolve);
-        console.log(`Successfully downloaded to: ${targetPath}`);
-      });
+const CHUNK_SIZE = 100;
+const MAX_RICH_TEXT = 2000;
+
+const propNames = {
+  title: process.env.NOTION_PROP_TITLE || "Name",
+  date: process.env.NOTION_PROP_DATE || "Date",
+  tags: process.env.NOTION_PROP_TAGS || "Tags",
+  categories: process.env.NOTION_PROP_CATEGORIES || "Categories",
+  published: process.env.NOTION_PROP_PUBLISHED || "Published",
+  slug: process.env.NOTION_PROP_SLUG || "Slug",
+  sourcePath: process.env.NOTION_PROP_SOURCE_PATH || "Source Path",
+};
+
+const normalizeArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+  return [String(value)];
+};
+
+const normalizeDate = (value, fallback) => {
+  const raw = String(value || fallback || "").trim();
+  if (!raw) return new Date().toISOString().slice(0, 10);
+  return raw.slice(0, 10);
+};
+
+const splitRichText = (text) => {
+  const chunks = [];
+  let current = String(text || "");
+  while (current.length > MAX_RICH_TEXT) {
+    chunks.push(current.slice(0, MAX_RICH_TEXT));
+    current = current.slice(MAX_RICH_TEXT);
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks.length > 0 ? chunks : [""];
+};
+
+const textToRichText = (text) =>
+  splitRichText(text).map((chunk) => ({
+    type: "text",
+    text: { content: chunk },
+  }));
+
+const toExternalAssetUrl = (url) => {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+
+  const siteBase = (process.env.SITE_BASE_URL || "").replace(/\/+$/, "");
+  if (siteBase && url.startsWith("/")) {
+    return `${siteBase}${url}`;
+  }
+
+  const rawBase = (process.env.RAW_BASE_URL || "").replace(/\/+$/, "");
+  if (rawBase && url.startsWith("/")) {
+    return `${rawBase}${url}`;
+  }
+
+  return null;
+};
+
+const markdownToBlocks = (markdown) => {
+  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  const blocks = [];
+  const paragraphBuffer = [];
+  const quoteBuffer = [];
+  let inCodeBlock = false;
+  let codeLang = "plain text";
+  let codeLines = [];
+
+  const flushParagraph = () => {
+    const joined = paragraphBuffer.join("\n").trim();
+    paragraphBuffer.length = 0;
+    if (!joined) return;
+    blocks.push({
+      object: "block",
+      type: "paragraph",
+      paragraph: { rich_text: textToRichText(joined) },
     });
+  };
 
-    request.on("error", (err) => {
-      console.error(`Error downloading file: ${err.message}`);
-      fs.unlink(targetPath, () => reject(err));
+  const flushQuote = () => {
+    const joined = quoteBuffer.join("\n").trim();
+    quoteBuffer.length = 0;
+    if (!joined) return;
+    blocks.push({
+      object: "block",
+      type: "quote",
+      quote: { rich_text: textToRichText(joined) },
     });
-  });
+  };
 
-async function fetchNotionPosts() {
-  const dataSourceId = process.env.NOTION_DATABASE_ID;
-
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    filter: {
-      property: "Published",
-      checkbox: {
-        equals: true,
+  const flushCode = () => {
+    const code = codeLines.join("\n");
+    codeLines = [];
+    blocks.push({
+      object: "block",
+      type: "code",
+      code: {
+        rich_text: textToRichText(code),
+        language: codeLang,
       },
-    },
-  });
+    });
+  };
 
-  const postsDir = "_posts";
-  if (!fs.existsSync(postsDir)) {
-    fs.mkdirSync(postsDir);
-  }
+  for (const rawLine of lines) {
+    const line = rawLine;
 
-  const assetsImgDir = "assets/img/posts";
-  if (!fs.existsSync(assetsImgDir)) {
-    fs.mkdirSync(assetsImgDir, { recursive: true });
-  }
-
-  for (const page of response.results) {
-    const props = page.properties;
-
-    const title = props.Name?.title?.[0]?.plain_text || "Untitled";
-    const date =
-      props.Date?.date?.start || new Date().toISOString().split("T")[0];
-    const tags = props.Tags?.multi_select?.map((t) => t.name) || [];
-    const categories = props.Categories?.multi_select?.map((t) => t.name) || [];
-
-    const safeTitle = title
-      .replace(/\s+/g, "-")
-      .replace(/[^a-zA-Z0-9가-힣\-_]/g, "");
-    const postFileName = `${date}-${safeTitle}.md`;
-    const postFilePath = path.join(postsDir, postFileName);
-
-    const imageDirName = `${date}-${safeTitle}`;
-    const imagesDirPath = path.join(assetsImgDir, imageDirName);
-    
-    if (!fs.existsSync(imagesDirPath)) {
-      fs.mkdirSync(imagesDirPath, { recursive: true });
+    if (inCodeBlock) {
+      if (/^```/.test(line.trim())) {
+        flushCode();
+        inCodeBlock = false;
+        codeLang = "plain text";
+      } else {
+        codeLines.push(line);
+      }
+      continue;
     }
 
-    console.log(`Processing: ${title}`);
+    const codeOpen = line.match(/^```([\w+-]*)\s*$/);
+    if (codeOpen) {
+      flushParagraph();
+      flushQuote();
+      inCodeBlock = true;
+      codeLang = codeOpen[1] || "plain text";
+      continue;
+    }
 
-    n2m.setCustomTransformer("image", async (block) => {
-      const { image } = block;
-      const imageUrl = image.type === "external" ? image.external.url : image.file.url;
-      const caption = image.caption[0]?.plain_text || "image";
+    if (/^\s*$/.test(line)) {
+      flushParagraph();
+      flushQuote();
+      continue;
+    }
 
-      try {
-        const fileExtension = path.extname(new URL(imageUrl).pathname);
-        // Create a deterministic file name from the block's unique ID
-        const imageName = `${block.id}${fileExtension}`;
-        const imagePath = path.join(imagesDirPath, imageName);
-        const relativeImagePath = `/assets/img/posts/${imageDirName}/${imageName}`;
-
-        // Download the image only if it doesn't already exist
-        if (!fs.existsSync(imagePath)) {
-          await downloadFile(imageUrl, imagePath);
-          console.log(`Downloaded new image: ${imageName}`);
-        } else {
-          console.log(`Image already exists, skipping: ${imageName}`);
-        }
-        
-        return `![${caption}](${relativeImagePath})`;
-      } catch (error) {
-        console.error(`Failed to download image from ${imageUrl}:`, error);
-        return `![Failed to download image: ${caption}](${imageUrl})`;
+    const image = line.trim().match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+    if (image) {
+      flushParagraph();
+      flushQuote();
+      const caption = image[1] || "image";
+      const target = toExternalAssetUrl(image[2]);
+      if (target) {
+        blocks.push({
+          object: "block",
+          type: "image",
+          image: {
+            type: "external",
+            external: { url: target },
+            caption: textToRichText(caption),
+          },
+        });
+      } else {
+        blocks.push({
+          object: "block",
+          type: "paragraph",
+          paragraph: { rich_text: textToRichText(line.trim()) },
+        });
       }
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushQuote();
+      const level = heading[1].length;
+      const type = `heading_${level}`;
+      blocks.push({
+        object: "block",
+        type,
+        [type]: { rich_text: textToRichText(heading[2].trim()) },
+      });
+      continue;
+    }
+
+    if (/^\s*---+\s*$/.test(line)) {
+      flushParagraph();
+      flushQuote();
+      blocks.push({ object: "block", type: "divider", divider: {} });
+      continue;
+    }
+
+    const quote = line.match(/^\s*>\s?(.*)$/);
+    if (quote) {
+      flushParagraph();
+      quoteBuffer.push(quote[1]);
+      continue;
+    }
+
+    const numbered = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (numbered) {
+      flushParagraph();
+      flushQuote();
+      blocks.push({
+        object: "block",
+        type: "numbered_list_item",
+        numbered_list_item: { rich_text: textToRichText(numbered[1].trim()) },
+      });
+      continue;
+    }
+
+    const bulleted = line.match(/^\s*[-*+]\s+(.*)$/);
+    if (bulleted) {
+      flushParagraph();
+      flushQuote();
+      blocks.push({
+        object: "block",
+        type: "bulleted_list_item",
+        bulleted_list_item: { rich_text: textToRichText(bulleted[1].trim()) },
+      });
+      continue;
+    }
+
+    paragraphBuffer.push(line);
+  }
+
+  flushParagraph();
+  flushQuote();
+  if (inCodeBlock) flushCode();
+
+  return blocks;
+};
+
+const chunk = (arr, size) => {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
+};
+
+const getPropertyMeta = (schema, propertyName, expectedTypes = []) => {
+  const prop = schema[propertyName];
+  if (!prop) return null;
+  if (expectedTypes.length === 0 || expectedTypes.includes(prop.type)) return prop;
+  return null;
+};
+
+const findExistingPage = async (dataSourceId, schema, post) => {
+  const slugMeta = getPropertyMeta(schema, propNames.slug, ["rich_text"]);
+  if (slugMeta) {
+    const bySlug = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      page_size: 10,
+      filter: {
+        property: propNames.slug,
+        rich_text: { contains: post.slug },
+      },
     });
+    if (bySlug.results.length > 0) return bySlug.results[0];
+  }
 
-    const mdblocks = await n2m.pageToMarkdown(page.id);
-    const mdString = n2m.toMarkdownString(mdblocks);
-    const content = mdString.parent || "";
+  const titleMeta = getPropertyMeta(schema, propNames.title, ["title"]);
+  const dateMeta = getPropertyMeta(schema, propNames.date, ["date"]);
+  if (titleMeta && dateMeta) {
+    const byTitleAndDate = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      page_size: 10,
+      filter: {
+        and: [
+          { property: propNames.title, title: { contains: post.title } },
+          { property: propNames.date, date: { equals: post.date } },
+        ],
+      },
+    });
+    if (byTitleAndDate.results.length > 0) return byTitleAndDate.results[0];
+  }
 
-    const frontmatter = `---
-layout: post
-title: "${title}"
-date: ${date} 00:00:00 +0900
-categories: [${categories.join(", ")}]
-tags: [${tags.join(", ")}]
----
+  return null;
+};
 
-`;
+const buildProperties = (schema, post) => {
+  const properties = {};
 
-    fs.writeFileSync(postFilePath, frontmatter + content, "utf8");
-    console.log(`Synced: ${postFileName}`);
+  const titleMeta = getPropertyMeta(schema, propNames.title, ["title"]);
+  if (!titleMeta) {
+    throw new Error(`Notion title property '${propNames.title}' was not found.`);
+  }
+  properties[propNames.title] = {
+    title: [{ type: "text", text: { content: post.title } }],
+  };
+
+  const dateMeta = getPropertyMeta(schema, propNames.date, ["date"]);
+  if (dateMeta) {
+    properties[propNames.date] = { date: { start: post.date } };
+  }
+
+  const tagsMeta = getPropertyMeta(schema, propNames.tags, ["multi_select"]);
+  if (tagsMeta) {
+    properties[propNames.tags] = {
+      multi_select: post.tags.map((name) => ({ name })),
+    };
+  }
+
+  const categoriesMeta = getPropertyMeta(schema, propNames.categories, ["multi_select"]);
+  if (categoriesMeta) {
+    properties[propNames.categories] = {
+      multi_select: post.categories.map((name) => ({ name })),
+    };
+  }
+
+  const publishedMeta = getPropertyMeta(schema, propNames.published, ["checkbox"]);
+  if (publishedMeta) {
+    properties[propNames.published] = { checkbox: true };
+  }
+
+  const slugMeta = getPropertyMeta(schema, propNames.slug, ["rich_text"]);
+  if (slugMeta) {
+    properties[propNames.slug] = { rich_text: textToRichText(post.slug) };
+  }
+
+  const sourceMeta = getPropertyMeta(schema, propNames.sourcePath, ["rich_text"]);
+  if (sourceMeta) {
+    properties[propNames.sourcePath] = { rich_text: textToRichText(post.relativePath) };
+  }
+
+  return properties;
+};
+
+const listLocalPosts = (postsDir) => {
+  return fs
+    .readdirSync(postsDir)
+    .filter((name) => name.endsWith(".md"))
+    .map((name) => path.join(postsDir, name))
+    .sort();
+};
+
+const parsePost = (filePath, rootDir) => {
+  const raw = fs.readFileSync(filePath, "utf8");
+  const parsed = matter(raw);
+  const base = path.basename(filePath, ".md");
+  const fallbackTitle = base.replace(/^\d{4}-\d{2}-\d{2}-/, "").replace(/-/g, " ");
+  const title = String(parsed.data.title || fallbackTitle).trim();
+  const date = normalizeDate(parsed.data.date, base.slice(0, 10));
+  const tags = normalizeArray(parsed.data.tags);
+  const categories = normalizeArray(parsed.data.categories);
+
+  return {
+    filePath,
+    relativePath: path.relative(rootDir, filePath).replace(/\\/g, "/"),
+    slug: base,
+    title,
+    date,
+    tags,
+    categories,
+    content: parsed.content.trim(),
+  };
+};
+
+const clearChildren = async (pageId) => {
+  let startCursor = undefined;
+  let hasMore = true;
+  const ids = [];
+
+  while (hasMore) {
+    const response = await notion.blocks.children.list({
+      block_id: pageId,
+      start_cursor: startCursor,
+      page_size: 100,
+    });
+    ids.push(...response.results.map((b) => b.id));
+    hasMore = response.has_more;
+    startCursor = response.next_cursor ?? undefined;
+  }
+
+  for (const id of ids) {
+    await notion.blocks.delete({ block_id: id });
+  }
+};
+
+const appendChildren = async (pageId, blocks) => {
+  const payload = blocks.length > 0 ? blocks : [{ object: "block", type: "paragraph", paragraph: { rich_text: textToRichText(" ") } }];
+  for (const children of chunk(payload, CHUNK_SIZE)) {
+    await notion.blocks.children.append({
+      block_id: pageId,
+      children,
+    });
+  }
+};
+
+async function syncLocalPostsToNotion() {
+  const dataSourceId = process.env.NOTION_DATABASE_ID;
+  if (!process.env.NOTION_API_KEY || !dataSourceId) {
+    throw new Error("NOTION_API_KEY and NOTION_DATABASE_ID must be set.");
+  }
+
+  const postsDir = path.resolve(process.cwd(), "_posts");
+  if (!fs.existsSync(postsDir)) {
+    throw new Error(`Posts directory not found: ${postsDir}`);
+  }
+
+  const dataSource = await notion.dataSources.retrieve({ data_source_id: dataSourceId });
+  const schema = dataSource.properties || {};
+  const postPaths = listLocalPosts(postsDir);
+
+  console.log(`Found ${postPaths.length} local posts.`);
+
+  for (const filePath of postPaths) {
+    const post = parsePost(filePath, process.cwd());
+    const blocks = markdownToBlocks(post.content);
+    const properties = buildProperties(schema, post);
+    const existingPage = await findExistingPage(dataSourceId, schema, post);
+
+    if (existingPage) {
+      await notion.pages.update({
+        page_id: existingPage.id,
+        properties,
+      });
+      await clearChildren(existingPage.id);
+      await appendChildren(existingPage.id, blocks);
+      console.log(`Updated Notion page for ${post.slug}`);
+    } else {
+      const created = await notion.pages.create({
+        parent: { data_source_id: dataSourceId },
+        properties,
+      });
+      await appendChildren(created.id, blocks);
+      console.log(`Created Notion page for ${post.slug}`);
+    }
   }
 }
 
-fetchNotionPosts().catch(console.error);
+syncLocalPostsToNotion().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

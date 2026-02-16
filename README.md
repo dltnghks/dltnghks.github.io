@@ -29,6 +29,34 @@ latest version of the **Chirpy** theme and the [CD][CD] workflow to here, so tha
 
 Check out the [theme's docs](https://github.com/cotes2020/jekyll-theme-chirpy/wiki).
 
+## Notion Sync (Local Posts -> Notion)
+
+This repository syncs local markdown posts in `_posts` to a Notion data source.
+
+1. Write posts locally (for example with Obsidian) in `_posts/*.md`.
+2. Push to `main` (including pushes from another repository workflow).
+3. GitHub Actions (`Sync Posts To Notion`) runs `npm run sync:notion` and uploads posts to Notion.
+
+### Required secrets
+
+- `NOTION_API_KEY`
+- `NOTION_DATABASE_ID`
+
+### Optional variables
+
+- `SITE_BASE_URL` (for turning `/assets/...` image paths into absolute URLs)
+- `NOTION_PROP_TITLE`, `NOTION_PROP_DATE`, `NOTION_PROP_TAGS`, `NOTION_PROP_CATEGORIES`, `NOTION_PROP_PUBLISHED`, `NOTION_PROP_SLUG`, `NOTION_PROP_SOURCE_PATH`
+
+Default Notion property names are:
+
+- Title: `Name` (required)
+- Date: `Date`
+- Tags: `Tags`
+- Categories: `Categories`
+- Published: `Published`
+- Slug: `Slug`
+- Source Path: `Source Path`
+
 ## Contributing
 
 This repository is automatically updated with new releases from the theme repository. If you encounter any issues or want to contribute to its improvement, please visit the [theme repository][chirpy] to provide feedback.

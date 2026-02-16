@@ -1,0 +1,46 @@
+name: "Sync Posts To Notion"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "_posts/**"
+      - "assets/img/posts/**"
+      - "sync_notion.js"
+      - "package.json"
+      - ".github/workflows/notion-sync.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync_notion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Sync local posts to Notion
+        run: npm run sync:notion
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          SITE_BASE_URL: ${{ vars.SITE_BASE_URL }}
+          RAW_BASE_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}
+          NOTION_PROP_TITLE: ${{ vars.NOTION_PROP_TITLE }}
+          NOTION_PROP_DATE: ${{ vars.NOTION_PROP_DATE }}
+          NOTION_PROP_TAGS: ${{ vars.NOTION_PROP_TAGS }}
+          NOTION_PROP_CATEGORIES: ${{ vars.NOTION_PROP_CATEGORIES }}
+          NOTION_PROP_PUBLISHED: ${{ vars.NOTION_PROP_PUBLISHED }}
+          NOTION_PROP_SLUG: ${{ vars.NOTION_PROP_SLUG }}
+          NOTION_PROP_SOURCE_PATH: ${{ vars.NOTION_PROP_SOURCE_PATH }}
