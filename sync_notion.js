@@ -68,9 +68,27 @@ const normalizeArray = (value) => {
 };
 
 const normalizeDate = (value, fallback) => {
-  const raw = String(value || fallback || "").trim();
-  if (!raw) return new Date().toISOString().slice(0, 10);
-  return raw.slice(0, 10);
+  const toIsoDate = (input) => {
+    if (!input) return null;
+    if (input instanceof Date && !Number.isNaN(input.getTime())) {
+      return input.toISOString().slice(0, 10);
+    }
+
+    const text = String(input).trim();
+    if (!text) return null;
+
+    const isoPrefix = text.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (isoPrefix) return isoPrefix[1];
+
+    const parsed = new Date(text);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10);
+    }
+
+    return null;
+  };
+
+  return toIsoDate(value) || toIsoDate(fallback) || new Date().toISOString().slice(0, 10);
 };
 
 const splitRichText = (text) => {
