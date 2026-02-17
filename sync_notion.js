@@ -11,6 +11,39 @@ const notion = new Client({
 
 const CHUNK_SIZE = 100;
 const MAX_RICH_TEXT = 2000;
+const NOTION_CODE_LANGUAGES = new Set([
+  "abap", "abc", "agda", "arduino", "ascii art", "assembly", "bash", "basic", "bnf", "c", "c#",
+  "c++", "clojure", "coffeescript", "coq", "css", "dart", "dhall", "diff", "docker", "ebnf",
+  "elixir", "elm", "erlang", "f#", "flow", "fortran", "gherkin", "glsl", "go", "graphql",
+  "groovy", "haskell", "hcl", "html", "idris", "java", "javascript", "json", "julia", "kotlin",
+  "latex", "less", "lisp", "livescript", "llvm ir", "lua", "makefile", "markdown", "markup",
+  "matlab", "mathematica", "mermaid", "nix", "notion formula", "objective-c", "ocaml", "pascal",
+  "perl", "php", "plain text", "powershell", "prolog", "protobuf", "purescript", "python", "r",
+  "racket", "reason", "ruby", "rust", "sass", "scala", "scheme", "scss", "shell", "smalltalk",
+  "solidity", "sql", "swift", "toml", "typescript", "vb.net", "verilog", "vhdl", "visual basic",
+  "webassembly", "xml", "yaml", "java/c/c++/c#",
+]);
+const CODE_LANGUAGE_ALIASES = {
+  "": "plain text",
+  plaintext: "plain text",
+  text: "plain text",
+  txt: "plain text",
+  csharp: "c#",
+  cs: "c#",
+  cpp: "c++",
+  "cxx": "c++",
+  js: "javascript",
+  ts: "typescript",
+  py: "python",
+  rb: "ruby",
+  sh: "shell",
+  zsh: "shell",
+  psm1: "powershell",
+  ps1: "powershell",
+  yml: "yaml",
+  md: "markdown",
+  objc: "objective-c",
+};
 
 const propNames = {
   title: process.env.NOTION_PROP_TITLE || "Name",
@@ -56,6 +89,12 @@ const textToRichText = (text) =>
     type: "text",
     text: { content: chunk },
   }));
+
+const normalizeCodeLanguage = (value) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  const candidate = CODE_LANGUAGE_ALIASES[normalized] || normalized || "plain text";
+  return NOTION_CODE_LANGUAGES.has(candidate) ? candidate : "plain text";
+};
 
 const toExternalAssetUrl = (url) => {
   if (!url) return null;
@@ -137,7 +176,7 @@ const markdownToBlocks = (markdown) => {
       flushParagraph();
       flushQuote();
       inCodeBlock = true;
-      codeLang = codeOpen[1] || "plain text";
+      codeLang = normalizeCodeLanguage(codeOpen[1]);
       continue;
     }
 
@@ -393,21 +432,25 @@ const appendChildren = async (pageId, blocks) => {
 };
 
 async function syncLocalPostsToNotion() {
-  const dataSourceId = process.env.NOTION_DATABASE_ID;
-  if (!process.env.NOTION_API_KEY || !dataSourceId) {
-    throw new Error("NOTION_API_KEY and NOTION_DATABASE_ID must be set.");
-  }
-
   const postsDir = path.resolve(process.cwd(), "_posts");
   if (!fs.existsSync(postsDir)) {
     throw new Error(`Posts directory not found: ${postsDir}`);
   }
 
+  const postPaths = listLocalPosts(postsDir);
+  console.log(`Found ${postPaths.length} local posts.`);
+  if (postPaths.length === 0) {
+    console.log("No markdown posts found. Skipping Notion sync.");
+    return;
+  }
+
+  const dataSourceId = process.env.NOTION_DATABASE_ID;
+  if (!process.env.NOTION_API_KEY || !dataSourceId) {
+    throw new Error("NOTION_API_KEY and NOTION_DATABASE_ID must be set.");
+  }
+
   const dataSource = await notion.dataSources.retrieve({ data_source_id: dataSourceId });
   const schema = dataSource.properties || {};
-  const postPaths = listLocalPosts(postsDir);
-
-  console.log(`Found ${postPaths.length} local posts.`);
 
   for (const filePath of postPaths) {
     const post = parsePost(filePath, process.cwd());
