@@ -44,6 +44,7 @@ const CODE_LANGUAGE_ALIASES = {
   md: "markdown",
   objc: "objective-c",
 };
+let dateFallbackWarned = false;
 
 const propNames = {
   title: process.env.NOTION_PROP_TITLE || "Name",
@@ -317,6 +318,33 @@ const getPropertyMeta = (schema, propertyName, expectedTypes = []) => {
   return null;
 };
 
+const getFirstPropertyMetaByType = (schema, expectedTypes = []) => {
+  for (const [name, prop] of Object.entries(schema)) {
+    if (expectedTypes.length === 0 || expectedTypes.includes(prop.type)) {
+      return { name, type: prop.type };
+    }
+  }
+  return null;
+};
+
+const resolveDatePropertyMeta = (schema) => {
+  const configured = getPropertyMeta(schema, propNames.date, ["date"]);
+  if (configured) return configured;
+
+  const fallback = getFirstPropertyMetaByType(schema, ["date"]);
+  if (fallback) {
+    if (!dateFallbackWarned) {
+      console.warn(
+        `[warn] Configured date property '${propNames.date}' was not found as type 'date'. Falling back to '${fallback.name}'.`
+      );
+      dateFallbackWarned = true;
+    }
+    return fallback;
+  }
+
+  return null;
+};
+
 const warnIfPropertyMissingOrTypeMismatch = (schema, propertyName, expectedTypes, label) => {
   const resolvedName = resolveSchemaPropertyName(schema, propertyName);
   if (!resolvedName) {
@@ -346,7 +374,7 @@ const findExistingPage = async (dataSourceId, schema, post) => {
   }
 
   const titleMeta = getPropertyMeta(schema, propNames.title, ["title"]);
-  const dateMeta = getPropertyMeta(schema, propNames.date, ["date"]);
+  const dateMeta = resolveDatePropertyMeta(schema);
   if (titleMeta && dateMeta) {
     const byTitleAndDate = await notion.dataSources.query({
       data_source_id: dataSourceId,
@@ -375,7 +403,7 @@ const buildProperties = (schema, post) => {
     title: [{ type: "text", text: { content: post.title } }],
   };
 
-  const dateMeta = getPropertyMeta(schema, propNames.date, ["date"]);
+  const dateMeta = resolveDatePropertyMeta(schema);
   if (dateMeta) {
     properties[dateMeta.name] = { date: { start: post.date } };
   }
