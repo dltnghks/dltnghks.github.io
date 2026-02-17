@@ -282,11 +282,35 @@ const chunk = (arr, size) => {
   return out;
 };
 
+const resolveSchemaPropertyName = (schema, propertyName) => {
+  if (schema[propertyName]) return propertyName;
+  const target = String(propertyName || "").trim().toLowerCase();
+  if (!target) return null;
+  return Object.keys(schema).find((key) => key.toLowerCase() === target) || null;
+};
+
 const getPropertyMeta = (schema, propertyName, expectedTypes = []) => {
-  const prop = schema[propertyName];
-  if (!prop) return null;
-  if (expectedTypes.length === 0 || expectedTypes.includes(prop.type)) return prop;
+  const resolvedName = resolveSchemaPropertyName(schema, propertyName);
+  if (!resolvedName) return null;
+  const prop = schema[resolvedName];
+  if (expectedTypes.length === 0 || expectedTypes.includes(prop.type)) {
+    return { name: resolvedName, type: prop.type };
+  }
   return null;
+};
+
+const warnIfPropertyMissingOrTypeMismatch = (schema, propertyName, expectedTypes, label) => {
+  const resolvedName = resolveSchemaPropertyName(schema, propertyName);
+  if (!resolvedName) {
+    console.warn(`[warn] Notion property '${propertyName}' (${label}) was not found. This field will be skipped.`);
+    return;
+  }
+  const prop = schema[resolvedName];
+  if (!expectedTypes.includes(prop.type)) {
+    console.warn(
+      `[warn] Notion property '${resolvedName}' (${label}) has type '${prop.type}', expected: ${expectedTypes.join(", ")}. This field will be skipped.`
+    );
+  }
 };
 
 const findExistingPage = async (dataSourceId, schema, post) => {
@@ -296,7 +320,7 @@ const findExistingPage = async (dataSourceId, schema, post) => {
       data_source_id: dataSourceId,
       page_size: 10,
       filter: {
-        property: propNames.slug,
+        property: slugMeta.name,
         rich_text: { contains: post.slug },
       },
     });
@@ -311,8 +335,8 @@ const findExistingPage = async (dataSourceId, schema, post) => {
       page_size: 10,
       filter: {
         and: [
-          { property: propNames.title, title: { contains: post.title } },
-          { property: propNames.date, date: { equals: post.date } },
+          { property: titleMeta.name, title: { contains: post.title } },
+          { property: dateMeta.name, date: { equals: post.date } },
         ],
       },
     });
@@ -329,42 +353,42 @@ const buildProperties = (schema, post) => {
   if (!titleMeta) {
     throw new Error(`Notion title property '${propNames.title}' was not found.`);
   }
-  properties[propNames.title] = {
+  properties[titleMeta.name] = {
     title: [{ type: "text", text: { content: post.title } }],
   };
 
   const dateMeta = getPropertyMeta(schema, propNames.date, ["date"]);
   if (dateMeta) {
-    properties[propNames.date] = { date: { start: post.date } };
+    properties[dateMeta.name] = { date: { start: post.date } };
   }
 
   const tagsMeta = getPropertyMeta(schema, propNames.tags, ["multi_select"]);
   if (tagsMeta) {
-    properties[propNames.tags] = {
+    properties[tagsMeta.name] = {
       multi_select: post.tags.map((name) => ({ name })),
     };
   }
 
   const categoriesMeta = getPropertyMeta(schema, propNames.categories, ["multi_select"]);
   if (categoriesMeta) {
-    properties[propNames.categories] = {
+    properties[categoriesMeta.name] = {
       multi_select: post.categories.map((name) => ({ name })),
     };
   }
 
   const publishedMeta = getPropertyMeta(schema, propNames.published, ["checkbox"]);
   if (publishedMeta) {
-    properties[propNames.published] = { checkbox: true };
+    properties[publishedMeta.name] = { checkbox: true };
   }
 
   const slugMeta = getPropertyMeta(schema, propNames.slug, ["rich_text"]);
   if (slugMeta) {
-    properties[propNames.slug] = { rich_text: textToRichText(post.slug) };
+    properties[slugMeta.name] = { rich_text: textToRichText(post.slug) };
   }
 
   const sourceMeta = getPropertyMeta(schema, propNames.sourcePath, ["rich_text"]);
   if (sourceMeta) {
-    properties[propNames.sourcePath] = { rich_text: textToRichText(post.relativePath) };
+    properties[sourceMeta.name] = { rich_text: textToRichText(post.relativePath) };
   }
 
   return properties;
@@ -451,6 +475,7 @@ async function syncLocalPostsToNotion() {
 
   const dataSource = await notion.dataSources.retrieve({ data_source_id: dataSourceId });
   const schema = dataSource.properties || {};
+  warnIfPropertyMissingOrTypeMismatch(schema, propNames.date, ["date"], "date");
 
   for (const filePath of postPaths) {
     const post = parsePost(filePath, process.cwd());
