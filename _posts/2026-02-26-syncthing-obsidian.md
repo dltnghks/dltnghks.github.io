@@ -98,3 +98,7 @@ PC Syncthing Web UI: `http://127.0.0.1:8384`
 - 처음 sync 시 PC → NAS 방향으로 파일이 복사됨 (PC가 최신 상태이므로)
 - 기존 NAS의 `999.노트` 폴더는 그대로 보존 (건드리지 않음)
 - obsidian-git은 그대로 유지 → GitHub 백업 및 다른 기기 clone 용도로 사용
+
+![image](/assets/img/posts/2026-02-26-syncthing-obsidian/image-3a0aa05a.png)
+NAS에 있는 폴더에서 파일을 생성할 때 권한 에러가 났음.
+위쪽에서는 정상 동작 했는데, 내부 폴더에서 권한 에러가 나는 경우 Recursive 체크 
