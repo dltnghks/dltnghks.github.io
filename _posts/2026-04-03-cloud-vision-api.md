@@ -219,3 +219,46 @@ STR=$(jq .data.translations[0].translatedText  translation-response.json) && STR
 curl "https://language.googleapis.com/v1/documents:analyzeEntities?key=${API_KEY}" \
   -s -X POST -H "Content-Type: application/json" --data-binary @nl-request.json
 ```
+
+
+# Cloud Vision API를 사용한 이미지 속 라벨, 얼굴, 랜드마크 감지
+
+### 1. 라벨 감지 (Label Detection)
+
+이미지의 전체적인 내용을 파악하여 **"무엇이 포함되어 있는지"** 키워드(라벨)를 추출합니다.
+- **기능:** 사물, 장소, 동작, 생물 종 등을 식별합니다.
+- **주요 응답 데이터:**
+    - `description`: 감지된 항목의 이름 (예: "Sky", "Mountain", "Car") 
+    - `score`: 신뢰도 점수 (0.0 ~ 1.0 사이, 1에 가까울수록 정확함)  
+    - `mid`: Google Knowledge Graph와 연동되는 고유 ID
+        
+
+### 2. 얼굴 감지 (Face Detection)
+
+이미지 내의 **사람 얼굴을 찾고 그 상태를 분석**합니다. (⚠️ 주의: 특정 인물을 식별하는 '얼굴 인식'과는 다릅니다.)
+- **기능:** 얼굴의 위치(경계 상자)와 눈, 코, 입 등의 랜드마크를 찾고 **감정 상태**를 분석합니다.
+- **주요 응답 데이터:**
+    - `boundingPoly`: 얼굴의 위치 좌표
+    - `joyLikelihood`, `sorrowLikelihood` 등: 감정 상태(기쁨, 슬픔, 분노, 놀람)를 5단계(VERY_LIKELY ~ VERY_UNLIKELY)로 표현 
+    - `headwearLikelihood`: 모자 착용 여부 분석
+        
+
+### 3. 랜드마크 감지 (Landmark Detection)
+이미지 속의 **유명한 건축물이나 자연 경관**을 식별합니다.
+- **기능:** 에펠탑, 자유의 여신상 같은 유명 지표를 인식하고 해당 장소의 이름과 위도/경도 좌표를 제공합니다.
+- **주요 응답 데이터:**
+    - `description`: 랜드마크 이름
+    - `locations`: 해당 장소의 위도(latitude)와 경도(longitude)
+    - `score`: 정확도 신뢰 점수
+
+
+# Cloud Vision API로 이미지 분석: 챌린지 실습
+필요한 API 
+1. Cloud Vision
+2. Cloud Translation
+3. Cloud Natural Language
+
+Region 지정
+버킷 생성
+
+
