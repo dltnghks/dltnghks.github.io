@@ -13,7 +13,7 @@ tags:
 # API 탐색기 : Qwik Start
 
 API 탐색기는 각 요청에서 자체 [API 키](https://developers.google.com/console/help/using-keys)를 사용
-### 목표
+## 목표
 
 - Cloud Storage 버킷을 만듭니다.
 - Cloud Storage에 이미지를 업로드하고 공개 상태로 설정합니다.
