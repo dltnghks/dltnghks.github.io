@@ -112,3 +112,10 @@ print(f"이유: {result.explanation}")
 
 # Document Processing with Gemini
 
+- Install the Google Gen AI SDK for Python
+- Extract structured entities from an unstructured document using Gemini
+- Classify document types using Gemini
+- Combine classification and entity extraction into a single workflow using Gemini
+- Summarize documents using Gemini
+
+
