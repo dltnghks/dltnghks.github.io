@@ -107,3 +107,8 @@ print(f"VIP 여부: {result.is_vip}")
 print(f"추천 상품: {result.recommended_product}")
 print(f"이유: {result.explanation}")
 ```
+
+---
+
+# Document Processing with Gemini
+
