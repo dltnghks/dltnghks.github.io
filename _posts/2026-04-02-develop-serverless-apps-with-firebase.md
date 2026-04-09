@@ -36,7 +36,7 @@ const { Firestore } = require("@google-cloud/firestore");
 ```
 이런 식으로 코드에서도 dependency 추가할 수 있음.
 
-![image](/assets/img/posts/2026-04-02-develop-serverless-apps-with-firebase/image-22a23b8b.png)
+![image](/assets/img/posts/2026-04-02-develop-serverless-apps-with-firebase/image-0a396d62.png)
 클라우드 페이지 내에서 powershell을 editor로 열어서 접근이 가능.
 코드 review를 assistent를 통해 간편하게 할 수 있따.
 
@@ -55,7 +55,7 @@ ect qwiklabs-gcp-02-6871d301a857
 1. 로컬에서 웹사이트를 빌드하고 수동으로 Firebase에 배포
 2. Cloud Build로 파이프라인을 빌드하여 프로세스를 자동화
 
-![image-1](/assets/img/posts/2026-04-02-develop-serverless-apps-with-firebase/image-1-1cd2e9d4.png)
+![image-1](/assets/img/posts/2026-04-02-develop-serverless-apps-with-firebase/image-1-543a3c5b.png)
 
 실습 시 Github 계정은 동일한 구글 계정으로 진행해야 한다..
 
