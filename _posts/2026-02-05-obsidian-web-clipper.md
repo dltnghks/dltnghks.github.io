@@ -13,6 +13,7 @@ tags:
 ![Pasted image 20260205144418](/assets/img/posts/2026-02-05-obsidian-web-clipper/pasted-image-20260205144418-2297761b.png)
 기본 템플릿을 통해 Content는 가져오는데, 이걸 외부 AI를 통해서 어떻게 요약하고 정리를 하는거지?
 
+{% raw %}
 노트 내용을 이런 식으로 입력. {{}}안의 내용이 변수처리된다.
 
 ```
@@ -48,6 +49,7 @@ tags:
 
 ```
 
+{% endraw %}
 근데 Gemini API를 사용하면 분당 제한과 일일 제한때문에 많이 못한다.
 결제를 해야 자유롭게 사용이 가능할텐데, Gemini cli. 
 [[Obsidian] 내가 관리하고 있는 글에 Gemini CLI를 연계해서 사용해보기 — All I Need Is Data.](https://data-newbie.tistory.com/1051)
