@@ -10,6 +10,8 @@ tags:
   - "transaction"
 ---
 
+![database-basics-overview](/assets/img/posts/2026-09-12-note-02-area-cs-m/database-basics-overview-0158bd10.png)
+
 # 데이터베이스 기초
 
 > [!summary] 한 줄 요약
